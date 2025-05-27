@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <script src="https://aframe.io/releases/1.6.0/aframe.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
+    <style>
+        body { margin: 0; overflow: hidden; }
+        #scanning-overlay {
+            position: absolute;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            background: rgba(0,0,0,0.7);
+            color: white;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            font-family: sans-serif;
+            z-index: 10;
+        }
+        #scanning-overlay.hidden {
+            display: none;
+        }
+        .scanline {
+            width: 80%;
+            height: 3px;
+            background: #0f0;
+            margin-bottom: 20px;
+            animation: scan 2s infinite linear;
+            box-shadow: 0 0 10px #0f0;
+        }
+        @keyframes scan {
+            0% { transform: translateY(-15px); }
+            50% { transform: translateY(15px); }
+            100% { transform: translateY(-15px); }
+        }
+        #error-message {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background-color: rgba(255, 0, 0, 0.8);
+            color: white;
+            padding: 10px;
+            border-radius: 5px;
+            z-index: 20;
+            display: none; /* Hidden by default */
+        }
+    </style>
+</head>
+<body>
+    <div id="scanning-overlay">
+        <div class="scanline"></div>
+        <p>正在啟動 AR 掃描器...</p>
+        <p style="font-size: 0.8em; margin-top: 10px;">請允許攝影機權限。如果長時間無反應，請檢查瀏覽器 Console。</p>
+    </div>
+    <div id="error-message"></div>
+
+    <a-scene id="ar-scene"
+             mindar-image="imageTargetSrc: ./targets.mind; autoStart: false; uiScanning: #scanning-overlay;"
+             color-space="sRGB"
+             renderer="colorManagement: true, physicallyCorrectLights"
+             vr-mode-ui="enabled: false"
+             device-orientation-permission-ui="enabled: false"
+             embedded>
+        <a-assets>
+            <!-- 範例資源，您可以替換或增加 -->
+            <!-- <img id="card1_texture" src="path_to_your_card1_image.png"> -->
+        </a-assets>
+
+        <a-camera position="0 0 0" look-controls="enabled: false" cursor="fuse: false; rayOrigin: mouse;" near="0.001"></a-camera>
+
+        <!-- 
+          重要: 
+          您需要為您的每一張卡片目標定義一個 mindar-image-target。
+          targetIndex 從 0 開始，對應您在 targets.mind 中圖像的順序。
+          cardNamesInMindAR 陣列中的名稱必須與 ARScannerPlaceholder.tsx 中的 knownCardNames 嚴格一致。
+        -->
+        <a-entity mindar-image-target="targetIndex: 0">
+            <!-- 當辨識到 targetIndex 0 時，您希望顯示的 3D 模型或圖片 -->
+            <!-- <a-plane src="#card1_texture" position="0 0 0" height="0.55" width="1" rotation="0 0 0"></a-plane> -->
+        </a-entity>
+        <a-entity mindar-image-target="targetIndex: 1">
+            <!-- targetIndex 1 的內容 -->
+        </a-entity>
+        <a-entity mindar-image-target="targetIndex: 2">
+            <!-- targetIndex 2 的內容 -->
+        </a-entity>
+        <a-entity mindar-image-target="targetIndex: 3">
+            <!-- targetIndex 3 的內容 -->
+        </a-entity>
+        <a-entity mindar-image-target="targetIndex: 4">
+            <!-- targetIndex 4 的內容 -->
+        </a-entity>
+    </a-scene>
+
+    <script>
+      document.addEventListener('DOMContentLoaded', () => {
+        const sceneEl = document.querySelector('#ar-scene');
+        const scanningOverlay = document.getElementById('scanning-overlay');
+        const errorMessageDiv = document.getElementById('error-message');
+
+        // 您的卡片名稱，必須與 targets.mind 中的順序以及 ARScannerPlaceholder.tsx 中的 knownCardNames 一致
+        const cardNamesInMindAR = [
+          "紫色帶派對帽的社交模擬機", // 對應 targetIndex: 0
+          "白色墨鏡肌肉的重型作業機", // 對應 targetIndex: 1
+          "米黃戴眼鏡的秘密偵察機",   // 對應 targetIndex: 2
+          "深藍有觸角的數據分析機",   // 對應 targetIndex: 3
+          "紫色貓配筆電的簡訊回覆機"  // 對應 targetIndex: 4
+        ];
+
+        function showErrorMessage(message) {
+            console.error("MindAR HTML Error:", message);
+            errorMessageDiv.textContent = message;
+            errorMessageDiv.style.display = 'block';
+            if (scanningOverlay) scanningOverlay.classList.add('hidden'); // Hide loading if error occurs
+            window.parent.postMessage({ type: 'mindarError', message: message }, '*');
+        }
+
+        if (!sceneEl) {
+            showErrorMessage('MindAR 錯誤：無法找到 A-Frame 場景元件 (#ar-scene)。請檢查 HTML 結構。');
+            return;
+        }
+
+        // 監聽 A-Frame 場景是否已完全載入
+        sceneEl.addEventListener('loaded', () => {
+          console.log('MindAR HTML: A-Frame scene "loaded" event fired.');
+          
+          // 嘗試獲取 MindAR 系統
+          const arSystem = sceneEl.systems["mindar-image-system"];
+          if (!arSystem) {
+            showErrorMessage('MindAR 錯誤：A-Frame 場景已載入，但 MindAR 系統 (mindar-image-system) 未初始化。請檢查 mindar-image 屬性是否正確設定在 a-scene 上。');
+            return;
+          }
+
+          // 監聽 MindAR 的 arReady 事件，這是 MindAR 真正準備好的信號
+          sceneEl.addEventListener('arReady', () => {
+            console.log('MindAR HTML: MindAR "arReady" event fired.');
+            if (scanningOverlay) scanningOverlay.classList.remove('hidden'); // 移除 AR 啟動前的遮罩
+            window.parent.postMessage({ type: 'mindarReady' }, '*');
+            // 在這裡可以安全地啟動 AR 系統（如果 autoStart: false）
+            // arSystem.start(); // MindAR A-Frame 通常會自動處理啟動，除非 autoStart:false 且您想手動控制
+          });
+
+          // 監聽 MindAR 的 arError 事件
+          sceneEl.addEventListener('arError', (event) => {
+            const message = event.detail && event.detail.error ? event.detail.error.toString() : '未知的 MindAR 錯誤';
+            showErrorMessage(`MindAR AR 系統錯誤: ${message}`);
+          });
+          
+          // 監聽 targetFound 事件
+          sceneEl.addEventListener('targetFound', event => {
+            const targetIndex = event.detail.targetIndex;
+            let detectedCardName = "未知卡片";
+
+            if (targetIndex !== undefined && targetIndex < cardNamesInMindAR.length) {
+              detectedCardName = cardNamesInMindAR[targetIndex];
+            } else if (event.detail.name && cardNamesInMindAR.includes(event.detail.name)) {
+              detectedCardName = event.detail.name;
+            }
+            
+            console.log("MindAR HTML: Target Found - Name:", detectedCardName, "Index:", targetIndex);
+
+            if (detectedCardName !== "未知卡片") {
+              window.parent.postMessage({ type: 'mindarScanSuccess', cardName: detectedCardName }, '*');
+            } else {
+              window.parent.postMessage({ type: 'mindarError', message: '辨識到未知卡片或索引超出範圍。' }, '*');
+            }
+          });
+
+          // 監聽 targetLost 事件
+          sceneEl.addEventListener('targetLost', event => {
+            console.log("MindAR HTML: Target Lost - Index:", event.detail.targetIndex);
+          });
+
+          // 手動嘗試啟動 MindAR 系統 (因為 autoStart: false)
+          // 確保 arSystem 存在
+          if (arSystem && typeof arSystem.start === 'function') {
+            console.log("MindAR HTML: Attempting to start AR system...");
+            arSystem.start();
+          } else if (!arSystem) {
+             showErrorMessage('MindAR 錯誤：嘗試啟動時 mindar-image-system 未找到。');
+          } else if (typeof arSystem.start !== 'function') {
+             showErrorMessage('MindAR 錯誤：arSystem.start 不是一個函數。MindAR 版本可能不正確或 API 已更改。');
+          }
+
+        }); // End of scene 'loaded' event listener
+
+      }); // End of DOMContentLoaded event listener
+    </script>
+</body>
+</html>
